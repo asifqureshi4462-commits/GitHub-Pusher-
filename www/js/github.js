@@ -219,7 +219,7 @@
       tree.forEach(t => { if (t.type === 'blob') remoteMap.set(t.path, t.sha); });
     } catch (_) { remoteMap = new Map(); }
 
-    if (remoteMap.size) {
+    if (remoteMap.size && opts.skipUnchanged !== false) {
       const changed = [];
       for (const f of todo) {
         const sha = await gitBlobSha(f.data);
@@ -276,7 +276,37 @@
     return { commitSha: commit.sha, branch, uploaded: total, skipped };
   }
 
-  const api = { GitHub, push, bytesToBase64, gitBlobSha };
+  /**
+   * diff({ gh, owner, repo, branch, files:[{path,data}] }) -> { status: Map(path -> 'NEW'|'MODIFIED'|'SAME'), counts }
+   */
+  async function diff(opts) {
+    const { gh, owner, repo, files } = opts;
+    let ref = await gh.getRef(owner, repo, opts.branch);
+    if (!ref) {
+      const info = await gh.repo(owner, repo);
+      ref = await gh.getRef(owner, repo, info.default_branch);
+    }
+    const remote = new Map();
+    if (ref) {
+      const c = await gh.getCommit(owner, repo, ref.object.sha);
+      const tree = await gh.getTree(owner, repo, c.tree.sha);
+      tree.forEach(t => { if (t.type === 'blob') remote.set(t.path, t.sha); });
+    }
+    const status = new Map();
+    const counts = { NEW: 0, MODIFIED: 0, SAME: 0 };
+    for (const f of files) {
+      let st = 'NEW';
+      if (remote.has(f.path)) {
+        const sha = await gitBlobSha(f.data);
+        st = (sha && sha === remote.get(f.path)) ? 'SAME' : 'MODIFIED';
+      }
+      status.set(f.path, st);
+      counts[st]++;
+    }
+    return { status, counts };
+  }
+
+  const api = { GitHub, push, diff, bytesToBase64, gitBlobSha };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.GitPusher = api;
 })(typeof window !== 'undefined' ? window : globalThis);

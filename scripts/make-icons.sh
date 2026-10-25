@@ -53,4 +53,15 @@ cat > "$RES/mipmap-anydpi-v26/$n.xml" <<XML
 XML
 done
 
+# Native launch (splash) screens: dark background + centred logo, same size as each template splash image
+SPLASH_BG="#0d1117"
+find "$RES" -type f -name 'splash*.png' | while read -r f; do
+  dims="$($IM "$f" -format '%w %h' info:)"
+  w="${dims% *}"; h="${dims#* }"
+  m=$(( w < h ? w : h ))
+  s=$(( m * 32 / 100 ))
+  $IM -size "${w}x${h}" "xc:$SPLASH_BG" \( "$SRC" -resize "${s}x${s}" \) -gravity center -composite "$f"
+  echo "Splash updated: $f (${w}x${h})"
+done
+
 echo "Icons generated from $SRC"
